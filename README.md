@@ -3,6 +3,9 @@
 HomeKit for Swift is a package which allows you to interact with HomeKit in a modern way.
 
 ```swift
+import SwiftHK
+
+
 let home = Manager().home
 
 // Print power status of all services
