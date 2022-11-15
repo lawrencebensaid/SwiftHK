@@ -9,7 +9,7 @@ import Foundation
 
 extension String {
     
-    public struct Characters: OptionSet {
+    struct Characters: OptionSet {
         
         public let rawValue: Int
         
@@ -36,7 +36,7 @@ extension String {
         
     }
     
-    public var isLowercase: Bool {
+    var isLowercase: Bool {
         guard count > 0 else { return false }
         var lowercase = true
         for character in self {
@@ -49,7 +49,7 @@ extension String {
         return lowercase
     }
     
-    public var isUppercase: Bool {
+    var isUppercase: Bool {
         guard count > 0 else { return false }
         var uppercase = true
         for character in self {
@@ -62,7 +62,7 @@ extension String {
         return uppercase
     }
     
-    public static func random(_ characters: Characters, ofSize length: Int) -> String {
+    static func random(_ characters: Characters, ofSize length: Int) -> String {
         var letters = ""
         if characters.contains(.upper) {
             letters += "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
