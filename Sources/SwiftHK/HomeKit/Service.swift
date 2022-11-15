@@ -10,37 +10,67 @@ import HomeKit
 public class Service: NSObject, HMAccessoryDelegate, ObservableObject, Identifiable {
     
     /// HM adaptee
-    let service: HMService?
+    let hmService: HMService?
+    
+    /// A unique identifier for the service.
+    public let id: UUID
+    /// Name for the service.
+    ///
+    /// Returns the service's name that is associated with HomeKit. The initial value is the value of the name characteristic of the service, if it has one.
+    public var name: String {
+        guard let name = hmService?.name else { return name_ }
+        return name
+    }
+    private var name_: String!
+    
+    /// The type of the service, e.g. `lightbulb`.
+    public var category: Category {
+        guard let type = hmService?.serviceType else { return category_ }
+        return Category(rawValue: type)!
+    }
+    private let category_: Category!
+    
+    /// Accessory that provides this service.
+    public var accessory: Accessory? {
+        guard let accessory = hmService?.accessory else { return accessory_ }
+        return Accessory(accessory)
+    }
+    private let accessory_: Accessory?
+    
+    /// Indicates if this service is the primary service.
+    ///
+    /// Applications should use this property to show the primary service on the accessory.
+    public var isPrimaryService: Bool {
+        guard let isPrimaryService = hmService?.isPrimaryService else { return isPrimaryService_ }
+        return isPrimaryService
+    }
+    private let isPrimaryService_: Bool!
+    
+    /// Array of Characteristic objects that represents all the characteristics provided by the service.
+    public var characteristics: [HMCharacteristic]
     
     private var listeners: [HMCharacteristic: ((Any?) -> ())] = [:]
     
-    public let id: UUID
-    public let name: String
-    public let category: Category
-    public let accessory: HMAccessory?
-    public let isPrimaryService: Bool
-    public var characteristics: [HMCharacteristic]
-    
     /// HM adaptor
     init(_ hmService: HMService) {
-        service = hmService
+        self.hmService = hmService
         id = hmService.uniqueIdentifier
-        name = hmService.name
-        category = Category(rawValue: hmService.serviceType) ?? .lightbulb
-        accessory = hmService.accessory
         characteristics = hmService.characteristics
-        isPrimaryService = hmService.isPrimaryService
+        name_ = nil
+        category_ = nil
+        accessory_ = nil
+        isPrimaryService_ = nil
     }
     
     /// Intended for SwiftUI preview purposes only!
     init(id: UUID = UUID(), name: String? = nil, category: Category, _ overrides: [Characteristic.Category: Any] = [:]) {
-        service = nil
+        hmService = nil
         self.id = id
-        self.name = name ?? "\(category.description()) \(String.random([.upper, .numbers], ofSize: 4))"
-        self.category = category
-        self.characteristics = []
-        self.isPrimaryService = true
-        accessory = nil
+        name_ = name ?? "\(category.description()) \(String.random([.upper, .numbers], ofSize: 4))"
+        category_ = category
+        accessory_ = nil
+        characteristics = []
+        isPrimaryService_ = true
     }
     
     
@@ -52,15 +82,11 @@ public class Service: NSObject, HMAccessoryDelegate, ObservableObject, Identifia
     ///
     /// - Throws: `NSError` which provides more information on the status of the request
     public func update(name: String) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            service?.updateName(name) { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            }
+        guard let service = hmService else {
+            self.name_ = name
+            return
         }
+        try await service.updateName(name)
     }
     
     /// Reads the value of the characteristic. The updated value can be read from the 'value' property of the characteristic.
@@ -88,7 +114,7 @@ public class Service: NSObject, HMAccessoryDelegate, ObservableObject, Identifia
     /// - Throws: `NSError` which provides more information on the status of the request
     public func onUpdate(_ category: Characteristic.Category, update: @escaping ((Any?) -> ())) {
         debugPrint("Subscribe \(name) \(category.description())")
-        accessory?.delegate = self
+        hmService?.accessory?.delegate = self
         for characteristic in characteristics {
             if characteristic.characteristicType == category.rawValue {
                 characteristic.enableNotification(true) { error in
@@ -98,22 +124,6 @@ public class Service: NSObject, HMAccessoryDelegate, ObservableObject, Identifia
                     }
                 }
                 listeners[characteristic] = update
-            }
-        }
-    }
-    
-    @available(*, deprecated, renamed: "update")
-    public func update(_ category: Characteristic.Category, state: Int, cb: (() -> ())? = nil) {
-        for char in characteristics {
-            if char.characteristicType == category.rawValue {
-                char.writeValue(state) { error in
-                    print(state)
-                    if error != nil {
-                        print("Error: \(error!)")
-                    }
-                    cb?()
-                }
-                break
             }
         }
     }
@@ -139,11 +149,6 @@ public class Service: NSObject, HMAccessoryDelegate, ObservableObject, Identifia
                 }
             }
         }
-    }
-    
-    @available(*, deprecated, message: "Exposing adaptees is deprecated")
-    public func getCharacteristic(_ category: Characteristic.Category) -> HMCharacteristic? {
-        return characteristics.filter({ $0.characteristicType == category.rawValue }).first
     }
     
     public func accessory(_ accessory: HMAccessory, service: HMService, didUpdateValueFor characteristic: HMCharacteristic) {
@@ -199,9 +204,13 @@ public class Service: NSObject, HMAccessoryDelegate, ObservableObject, Identifia
         case heaterCooler = "000000BC-0000-1000-8000-0026BB765291"
         case humidifierDehumidifier = "000000BD-0000-1000-8000-0026BB765291"
         case doorbell = "00000121-0000-1000-8000-0026BB765291"
+        case accessoryRuntimeInformation = "00000239-0000-1000-8000-0026BB765291"
+        case threadTransport = "00000701-0000-1000-8000-0026BB765291"
+        
+        case eve = "E863F007-079E-48FF-8F27-9C2605A29F52"
         
         public static var all: [Category] {
-            return [.`switch`, .thermostat, .outlet, .lockManagement, .airQualitySensor, .carbonDioxideSensor, .carbonMonoxideSensor, .contactSensor, .door, .humiditySensor, .leakSensor, .lightSensor, .motionSensor, .occupancySensor, .securitySystem, .statefulProgrammableSwitch, .statelessProgrammableSwitch, .smokeSensor, .temperatureSensor, .window, .windowCovering, .cameraRTPStreamManagement, .cameraControl, .microphone, .speaker, .airPurifier, .filterMaintenance, .slats, .label, .irrigationSystem, .valve, .faucet, .accessoryInformation, .fan, .garageDoorOpener, .lightbulb, .lockMechanism, .battery, .ventilationFan, .heaterCooler, .humidifierDehumidifier, .doorbell]
+            return [.`switch`, .thermostat, .outlet, .lockManagement, .airQualitySensor, .carbonDioxideSensor, .carbonMonoxideSensor, .contactSensor, .door, .humiditySensor, .leakSensor, .lightSensor, .motionSensor, .occupancySensor, .securitySystem, .statefulProgrammableSwitch, .statelessProgrammableSwitch, .smokeSensor, .temperatureSensor, .window, .windowCovering, .cameraRTPStreamManagement, .cameraControl, .microphone, .speaker, .airPurifier, .filterMaintenance, .slats, .label, .irrigationSystem, .valve, .faucet, .accessoryInformation, .fan, .garageDoorOpener, .lightbulb, .lockMechanism, .battery, .ventilationFan, .heaterCooler, .humidifierDehumidifier, .doorbell, .accessoryRuntimeInformation, .threadTransport, .eve]
         }
         public func description() -> String {
             switch self {
@@ -247,6 +256,9 @@ public class Service: NSObject, HMAccessoryDelegate, ObservableObject, Identifia
             case .heaterCooler: return "Heater-Cooler"
             case .humidifierDehumidifier: return "Humidifier-Dehumidifier"
             case .doorbell: return "Doorbell"
+            case .accessoryRuntimeInformation: return "Accessory Runtime Information"
+            case .threadTransport: return "Thread Transport"
+            case .eve: return "Eve"
             }
         }
     }

@@ -14,7 +14,7 @@ public class Home: NSObject, ObservableObject, Identifiable {
     static func == (lhs: Home, rhs: Home?) -> Bool { lhs.id == rhs?.id }
     
     /// HM adaptee
-    let home: HMHome?
+    let hmHome: HMHome?
     
     private var _zones: [Zone] = []
     private var _rooms: [Room] = []
@@ -24,30 +24,30 @@ public class Home: NSObject, ObservableObject, Identifiable {
     
     public let id: UUID
     @Published public var name: String
-    public var zones: [Zone] { home?.zones.map(Zone.init) ?? _zones }
-    public var rooms: [Room] { home?.rooms.map(Room.init) ?? _rooms }
-    public var scenes: [ActionSet] { home?.actionSets.map(ActionSet.init) ?? _scenes }
-    public var triggers: [Trigger] { home?.triggers.map(Trigger.init) ?? _triggers }
+    public var zones: [Zone] { hmHome?.zones.map(Zone.init) ?? _zones }
+    public var rooms: [Room] { hmHome?.rooms.map(Room.init) ?? _rooms }
+    public var scenes: [ActionSet] { hmHome?.actionSets.map(ActionSet.init) ?? _scenes }
+    public var triggers: [Trigger] { hmHome?.triggers.map(Trigger.init) ?? _triggers }
     
-    public var groups: [Group] {
-        guard let services = home?.serviceGroups else { return [] }
-        return services.map(Group.init)
+    public var groups: [ServiceGroup] {
+        guard let services = hmHome?.serviceGroups else { return [] }
+        return services.map(ServiceGroup.init)
     }
     
-    public var homeHubState: HMHomeHubState { home?.homeHubState ?? .notAvailable }
+    public var homeHubState: HMHomeHubState { hmHome?.homeHubState ?? .notAvailable }
     
     public override var description: String { "HPHome: \(name); \(id.uuidString)" }
     
     /// HM adaptor
     init(_ hmHome: HMHome) {
-        home = hmHome
+        self.hmHome = hmHome
         id = hmHome.uniqueIdentifier
         name = hmHome.name
     }
     
     /// Intended for SwiftUI preview purposes only!
     init(id: UUID = UUID(), name: String, zones: [Zone], rooms: [Room], scenes: [ActionSet] = [], triggers: [Trigger] = []) {
-        home = nil
+        hmHome = nil
         self.id = id
         self.name = name
         _zones = zones
@@ -59,12 +59,12 @@ public class Home: NSObject, ObservableObject, Identifiable {
     // MARK: - Resource selection
     
     public var accessories: [Accessory] {
-        guard let accessories = home?.accessories else { return _accessories }
+        guard let accessories = hmHome?.accessories else { return _accessories }
         return accessories.map(Accessory.init)
     }
     
     public func accessories(of categories: [Service.Category] = [], in room: Room? = nil) -> [Accessory] {
-        guard var accessories = home?.accessories else { return [] }
+        guard var accessories = hmHome?.accessories else { return [] }
         if categories.count > 0 {
             accessories = accessories.filter {
                 let accessory = Accessory($0)
@@ -79,12 +79,12 @@ public class Home: NSObject, ObservableObject, Identifiable {
     }
     
     public var services: [Service] {
-        guard let services = home?.servicesWithTypes(Service.Category.all.map({ $0.rawValue })) else { return [] }
+        guard let services = hmHome?.servicesWithTypes(Service.Category.all.map({ $0.rawValue })) else { return [] }
         return services.map(Service.init)
     }
     
     public func services(of categories: [Service.Category], in room: Room? = nil) -> [Service] {
-        guard var services = home?.servicesWithTypes(categories.map({ $0.rawValue })) else { return [] }
+        guard var services = hmHome?.servicesWithTypes(categories.map({ $0.rawValue })) else { return [] }
         if let room = room {
             services = services.filter({ $0.accessory?.room?.uniqueIdentifier == room.id })
         }
@@ -94,44 +94,52 @@ public class Home: NSObject, ObservableObject, Identifiable {
     
     // MARK: - Resource functions
     
+    /// Updates the name of the home.
     public func update(name: String) async throws {
-        guard home != nil else { // In case the object is a dummy
+        guard let hmHome = hmHome else {
             self.name = name
             return
         }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            home?.updateName(name) { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    self.name = name
-                    continuation.resume()
-                }
-            }
+        try await hmHome.updateName(name)
+    }
+    
+    /// Adds a new zone to the home.
+    public func addZone(named name: String) async throws -> Zone {
+        guard let hmHome = hmHome else {
+            return Zone(name: name, rooms: [])
         }
+        let hmZone = try await hmHome.addZone(named: name)
+        return Zone(hmZone)
     }
     
-    public func addZone(withName zoneName: String, completionHandler completion: @escaping (Zone?, Error?) -> Void) {
-        home?.addZone(withName: zoneName) { completion($0 != nil ? Zone($0!) : nil, $1) }
+    /// Removes a zone from the home.
+    public func remove(zone: Zone) async throws {
+        guard let hmHome = hmHome else { return }
+        guard let hmZone = zone.hmZone else { return }
+        try await hmHome.removeZone(hmZone)
     }
     
-    public func removeZone(_ zone: Zone, completionHandler completion: @escaping (Error?) -> Void) {
-        guard let zone = zone.zone else { completion(SHKError()); return }
-        home?.removeZone(zone, completionHandler: completion)
+    /// Creates a new room with the specified name.
+    public func addRoom(named name: String) async throws -> Room {
+        guard let hmHome = hmHome else {
+            return Room(name: name)
+        }
+        let hmRoom = try await hmHome.addRoom(named: name)
+        return Room(hmRoom)
     }
     
-    public func addRoom(withName roomName: String, completionHandler completion: @escaping (Room?, Error?) -> Void) {
-        home?.addRoom(withName: roomName) { completion($0 != nil ? Room($0!) : nil, $1) }
+    /// Removes a room from the home.
+    public func remove(room: Room) async throws {
+        guard let hmHome = hmHome else { return }
+        guard let hmRoom = room.hmRoom else { throw SHKError() }
+        try await hmHome.removeRoom(hmRoom)
     }
     
-    public func removeRoom(_ room: Room, completionHandler completion: @escaping (Error?) -> Void) {
-        guard let room = room.room else { completion(SHKError()); return }
-        home?.removeRoom(room, completionHandler: completion)
-    }
-    
-    public func executeActionSet(_ actionSet: ActionSet, completionHandler completion: @escaping (Error?) -> Void) {
-        guard let actionSet = actionSet.scene else { completion(SHKError()); return }
-        home?.executeActionSet(actionSet, completionHandler: completion)
+    /// Executes all the actions in a specified action set.
+    public func execute(actionSet: ActionSet) async throws {
+        guard let hmHome = hmHome else { return }
+        guard let hmActionSet = actionSet.hmActionSet else { return }
+        try await hmHome.executeActionSet(hmActionSet)
     }
     
 }

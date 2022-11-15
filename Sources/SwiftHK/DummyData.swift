@@ -46,14 +46,14 @@ extension ActionSet {
     
 }
 
-extension Group {
+extension ServiceGroup {
     
-    public static func preview(_ index: Int) -> Group { previews[index] }
+    public static func preview(_ index: Int) -> ServiceGroup { previews[index] }
     
-    public static var preview: Group { preview(Int.random(in: 0..<previews.count)) }
+    public static var preview: ServiceGroup { preview(Int.random(in: 0..<previews.count)) }
     
     private static let previews = [
-        Group(services: [.preview(0)])
+        ServiceGroup(services: [.preview(0)])
     ]
     
 }

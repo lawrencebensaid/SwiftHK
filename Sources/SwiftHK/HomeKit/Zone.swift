@@ -14,7 +14,7 @@ public class Zone: NSObject, ObservableObject, Identifiable {
     static func == (lhs: Zone, rhs: Zone?) -> Bool { lhs.id == rhs?.id }
     
     /// HM adaptee
-    let zone: HMZone?
+    let hmZone: HMZone?
     
     public let id: UUID
     public private(set) var name: String
@@ -22,7 +22,7 @@ public class Zone: NSObject, ObservableObject, Identifiable {
     
     /// HM adaptor
     init(_ hmZone: HMZone) {
-        zone = hmZone
+        self.hmZone = hmZone
         id = hmZone.uniqueIdentifier
         name = hmZone.name
         rooms = hmZone.rooms.map({ Room($0) })
@@ -30,7 +30,7 @@ public class Zone: NSObject, ObservableObject, Identifiable {
     
     /// Intended for SwiftUI preview purposes only!
     init(id: UUID = UUID(), name: String? = nil, rooms: [Room]) {
-        zone = nil
+        hmZone = nil
         self.id = id
         self.name = name ?? "Zone \(String.random([.upper, .numbers], ofSize: 4))"
         self.rooms = rooms
@@ -38,67 +38,29 @@ public class Zone: NSObject, ObservableObject, Identifiable {
     
     // MARK: - Resource functions
     
-    public func updateName(_ name: String, completionHandler completion: @escaping (Error?) -> Void) {
-        zone?.updateName(name) {
-            if $0 == nil {
-                self.name = name
-            }
-#if DEBUG
-            if let error = $0 { print(error.localizedDescription) }
-#endif
-            completion($0)
+    /// Updates the name of the zone.
+    public func update(name: String) async throws {
+        guard let hmZone = hmZone else {
+            self.name = name
+            return
         }
+        try await hmZone.updateName(name)
     }
     
-    public func addRoom(_ room: Room, completionHandler completion: @escaping (Error?) -> Void) {
-        guard let hmRoom = room.room else { completion(SHKError()); return }
-        zone?.addRoom(hmRoom) {
-            if $0 == nil {
-                self.rooms.append(room)
-            }
-#if DEBUG
-            if let error = $0 { print(error.localizedDescription) }
-#endif
-            completion($0)
-        }
+    /// Adds a room to the zone.
+    public func add(room: Room) async throws {
+        guard let hmZone = hmZone else { return }
+        guard let hmRoom = room.hmRoom else { return }
+        try await hmZone.addRoom(hmRoom)
+        rooms.append(room)
     }
     
-    public func removeRoom(_ room: Room, completionHandler completion: @escaping (Error?) -> Void) {
-        guard let hmRoom = room.room else { completion(SHKError()); return }
-        zone?.removeRoom(hmRoom) {
-            if $0 == nil {
-                self.rooms.removeAll(where: { $0 == room })
-            }
-#if DEBUG
-            if let error = $0 { print(error.localizedDescription) }
-#endif
-            completion($0)
-        }
-    }
-    
-    // MARK: Helpers
-    
-    public enum SortingMode: Int {
-        case name = 0
-        case roomCount = 1
-    }
-    
-    public func sort(_ zone: Zone, by sortingMode: SortingMode = .name, order: ComparisonResult = .orderedAscending) -> Bool {
-        switch(sortingMode) {
-        case .name: return name.localizedCaseInsensitiveCompare(zone.name) == order
-        case .roomCount:
-            let c1 = rooms.count
-            let c2 = zone.rooms.count
-            return order == .orderedAscending ? c1 > c2 : c1 < c2
-        }
-    }
-    
-    public static func find(_ query: String, in zones: [Zone]) -> [Zone] {
-        if query == "" { return zones }
-        return zones.filter {
-            $0.name.lowercased().contains(query.lowercased()) ||
-            Room.find(query, in: $0.rooms).count > 0
-        }
+    /// Removes a room from the zone.
+    public func remove(room: Room) async throws {
+        guard let hmZone = hmZone else { return }
+        guard let hmRoom = room.hmRoom else { return }
+        try await hmZone.removeRoom(hmRoom)
+        rooms.removeAll(where: { $0 == hmRoom })
     }
     
 }

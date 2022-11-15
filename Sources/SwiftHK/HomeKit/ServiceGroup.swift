@@ -1,5 +1,5 @@
 //
-//  Group.swift
+//  ServiceGroup.swift
 //  SwiftHK
 //
 //  Created by Lawrence Bensaid on 25/12/2021.
@@ -7,18 +7,21 @@
 
 import HomeKit
 
-public class Group: ObservableObject, Identifiable {
+public class ServiceGroup: ObservableObject, Identifiable {
     
     /// HM adaptee
-    let group: HMServiceGroup?
+    let hmServiceGroup: HMServiceGroup?
     
+    /// The unique identifier for the service group.
     public let id: UUID
-    public let name: String
+    /// The name of the service group.
+    public private(set) var name: String
+    /// Array of the services in the service group.
     public let services: [Service]
     
     /// HM adaptor
     init(_ hmServiceGroup: HMServiceGroup) {
-        group = hmServiceGroup
+        self.hmServiceGroup = hmServiceGroup
         id = hmServiceGroup.uniqueIdentifier
         name = hmServiceGroup.name
         services = hmServiceGroup.services.map(Service.init)
@@ -29,16 +32,16 @@ public class Group: ObservableObject, Identifiable {
         self.id = id
         self.name = name ?? "Group \(String.random([.upper, .numbers], ofSize: 4))"
         self.services = services
-        group = nil
+        hmServiceGroup = nil
     }
     
-    // MARK: Helpers
-    
-    public static func find(_ query: String, in groups: [Group]) -> [Group] {
-        if query == "" { return groups }
-        return groups.filter {
-            $0.name.lowercased().contains(query.lowercased())
+    /// Updates the name of the service group.
+    public func update(name: String) async throws {
+        guard let group = hmServiceGroup else {
+            self.name = name
+            return
         }
+        try await group.updateName(name)
     }
     
 }

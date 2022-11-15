@@ -10,12 +10,12 @@ import HomeKit
 public class Accessory: ObservableObject, Identifiable {
     
     /// HM adaptee
-    private let accessory: HMAccessory?
+    private let hmAccessory: HMAccessory?
     
     private let services_: [Service]
     
     public let localId: UUID
-    public let name: String
+    public private(set) var name: String
     public let room: HMRoom?
     public let category: Category
     public let isReachable: Bool
@@ -26,7 +26,7 @@ public class Accessory: ObservableObject, Identifiable {
     public let model: String?
     
     public var services: [Service] {
-        guard let services = accessory?.services else { return services_ }
+        guard let services = hmAccessory?.services else { return services_ }
         return services.map(Service.init)
     }
     
@@ -36,7 +36,7 @@ public class Accessory: ObservableObject, Identifiable {
     
     /// HM adaptor
     init(_ hmAccessory: HMAccessory) {
-        accessory = hmAccessory
+        self.hmAccessory = hmAccessory
         localId = hmAccessory.uniqueIdentifier
         name = hmAccessory.name
         room = hmAccessory.room
@@ -52,7 +52,7 @@ public class Accessory: ObservableObject, Identifiable {
     
     /// Intended for SwiftUI preview purposes only!
     init(id: UUID = UUID(), name: String? = nil, category: Category = .other, isReachable: Bool = true, services: [Service] = [], isBlocked: Bool = false, isBridged: Bool = false) {
-        accessory = nil
+        hmAccessory = nil
         self.localId = id
         self.name = name ?? "\(category.description()) \(String.random([.upper, .numbers], ofSize: 4))"
         room = nil
@@ -68,17 +68,19 @@ public class Accessory: ObservableObject, Identifiable {
     
     // MARK: - Resource functions
     
-    public func updateName(_ name: String, completionHandler completion: @escaping (Error?) -> Void) {
-        accessory?.updateName(name, completionHandler: completion)
+    /// Changes the name of the accessory.
+    public func update(name: String) async throws {
+        guard let accessory = hmAccessory else {
+            self.name = name
+            return
+        }
+        try await accessory.updateName(name)
     }
     
-    // MARK: Helpers
-    
-    public static func find(_ query: String, in accessories: [Accessory]) -> [Accessory] {
-        if query == "" { return accessories }
-        return accessories.filter {
-            $0.name.lowercased().contains(query.lowercased())
-        }
+    /// Asks an accessory to identify itself.
+    public func identify() async throws {
+        guard let accessory = hmAccessory else { return }
+        try await accessory.identify()
     }
     
     // MARK: - Category

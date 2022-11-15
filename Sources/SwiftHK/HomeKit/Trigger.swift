@@ -10,17 +10,18 @@ import HomeKit
 public class Trigger: ObservableObject, Identifiable {
     
     /// HM adaptee
-    private let trigger: HMTrigger?
+    private let hmTrigger: HMTrigger?
     
+    /// A unique identifier for this trigger.
     public let id: UUID
-    public let name: String
+    public private(set) var name: String
     public let isEnabled: Bool
     public let lastFireDate: Date?
     public let actionSets: [ActionSet]
     
     /// HM adaptor
     init(_ hmTrigger: HMTrigger) {
-        trigger = hmTrigger
+        self.hmTrigger = hmTrigger
         id = hmTrigger.uniqueIdentifier
         name = hmTrigger.name
         isEnabled = hmTrigger.isEnabled
@@ -28,19 +29,17 @@ public class Trigger: ObservableObject, Identifiable {
         actionSets = hmTrigger.actionSets.map(ActionSet.init)
     }
     
-    public func updateName(_ name: String, completionHandler completion: @escaping (Error?) -> Void) {
-        trigger?.updateName(name, completionHandler: completion)
-    }
-    
-    public func enable(_ enable: Bool, completionHandler: @escaping (Error?) -> Void) {
-        trigger?.enable(enable, completionHandler: completionHandler)
-    }
-    
-    public static func find(_ query: String, in triggers: [Trigger]) -> [Trigger] {
-        if query == "" { return triggers }
-        return triggers.filter {
-            $0.name.lowercased().contains(query.lowercased())
+    public func update(name: String) async throws {
+        guard let trigger = hmTrigger else {
+            self.name = name
+            return
         }
+        try await trigger.updateName(name)
+    }
+    
+    public func enable(_ enable: Bool) async throws {
+        guard let hmTrigger = hmTrigger else { return }
+        try await hmTrigger.enable(enable)
     }
     
 }

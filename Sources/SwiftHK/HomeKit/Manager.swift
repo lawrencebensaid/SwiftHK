@@ -10,47 +10,39 @@ import HomeKit
 public class Manager: NSObject, ObservableObject {
     
     /// HM adaptee
-    var manager: HMHomeManager
+    var hmManager: HMHomeManager
     
     private var listeners: [UUID: [Characteristic.Category: [((Service, Any?) -> ())]]] = [:]
     private var updateHomes: [((HMHome) -> ())] = []
     
-    public var homes: [Home] { manager.homes.map(Home.init) }
+    public var homes: [Home] { hmManager.homes.map(Home.init) }
     public private(set) var primaryHome: Home?
     
     @Published public var home: Home?
     
     public override init() {
-        manager = HMHomeManager()
+        self.hmManager = HMHomeManager()
         super.init()
-        manager.delegate = self
+        hmManager.delegate = self
     }
     
     // MARK: - Resource functions
     
-    public func addHome(withName homeName: String) async throws -> HMHome? {
-        try await withCheckedThrowingContinuation { continuation in
-            manager.addHome(withName: homeName) { home, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: home)
-                }
-            }
-        }
+    /// Adds a new home to this home manager.
+    public func addHome(named name: String) async throws -> HMHome? {
+        try await hmManager.addHome(named: name)
     }
     
-    public func removeHome(_ home: Home) async throws {
-        guard let home = home.home else { throw SHKError() }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            manager.removeHome(home) { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            }
-        }
+    /// Removes a home from this home manager.
+    public func remove(home: Home) async throws {
+        guard let hmHome = home.hmHome else { throw SHKError() }
+        try await hmManager.removeHome(hmHome)
+    }
+    
+    /// Updates the primary home of this home manager.
+    public func update(primary home: Home) async throws {
+        guard let hmHome = home.hmHome else { throw SHKError() }
+        try await hmManager.updatePrimaryHome(hmHome)
     }
     
     // MARK: - Update events
@@ -64,7 +56,7 @@ public class Manager: NSObject, ObservableObject {
     }
     
     public func onUpdate(_ categories: [Characteristic.Category], for type: [Service.Category] = Service.Category.all, perform: @escaping ((Service, Any?) -> ())) {
-        if let home = home?.home {
+        if let home = home?.hmHome {
             onUpdate(home: home, categories: categories, type: type, perform: perform)
         } else {
             onUpdateHomes {
@@ -107,7 +99,7 @@ public class Manager: NSObject, ObservableObject {
                 listeners[service.id]?[category] = []
             }
             listeners[service.id]?[category]?.append(perform)
-            service.accessory?.delegate = self
+            service.hmService?.accessory?.delegate = self
             characteristic.enableNotification(true) { error in
                 if let error = error {
                     print("Failed to enable notifications for \(characteristic): \(error.localizedDescription)")
