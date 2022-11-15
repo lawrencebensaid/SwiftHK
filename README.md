@@ -17,4 +17,11 @@ for service in home.services {
 }
 ```
 
+*Example output:*
+```
+Lightbulb L4MT is ON
+Lightbulb 8D21 is OFF
+Outlet P92E is ON
+```
+
 ***NOTE: This project is a WORK IN PROGRESS. It is unfinished subject to change!*** 
